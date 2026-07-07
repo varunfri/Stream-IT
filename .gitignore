@@ -47,3 +47,4 @@ app.*.map.json
 #ignore plan md's
 implementation_plan.md
 key.properties
+.env
