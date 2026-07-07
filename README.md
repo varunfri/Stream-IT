@@ -58,28 +58,24 @@ lib/
 - Android SDK / JDK (for Android builds) or Xcode (for macOS/iOS targets)
 
 ### 2. Environment Configuration
-
-Create a `.env` file in the root directory:
-
-```env
-TMDB_API_KEY=your_tmdb_api_key_here
-TMDB_BASE_URL=https://api.themoviedb.org/3
+Create a `config/dev.json` file in the root directory:
+```json
+{
+  "TMDB_API_KEY": "your_tmdb_api_key_here",
+  "TMDB_BASE_URL": "https://api.themoviedb.org/3"
+}
 ```
 
 ### 3. Run the Application
-
 Start the Android emulator or connect a device, then run:
-
 ```bash
-flutter run
+flutter run --dart-define-from-file=config/dev.json
 ```
 
 ### 4. Build Signed Release APK
-
 To build a signed release Android APK using the preconfigured keystore settings:
-
 ```bash
-flutter build apk --release
+flutter build apk --release --dart-define-from-file=config/dev.json
 ```
 
 The output signed APK will be located at:

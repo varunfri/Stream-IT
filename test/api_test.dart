@@ -1,12 +1,10 @@
 // ignore_for_file: avoid_print
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vid_api/services/tmdb_service.dart';
 
 void main() {
   test('test company content sorting', () async {
-    await dotenv.load(fileName: ".env");
     final container = ProviderContainer();
     final service = container.read(tmdbServiceProvider);
     

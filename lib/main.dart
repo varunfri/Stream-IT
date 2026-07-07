@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:adblocker_webview/adblocker_webview.dart';
@@ -14,15 +13,6 @@ import 'screens/person_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Load .env
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    debugPrint(
-      "Could not load .env file. Ensure it exists in the project root.",
-    );
-  }
 
   // Initialize Hive & open the search history box
   await Hive.initFlutter();

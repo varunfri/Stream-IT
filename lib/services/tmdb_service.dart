@@ -1,14 +1,24 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/custom_dns_adapter.dart';
 
 final tmdbDioProvider = Provider<Dio>((ref) {
-  final apiKey = dotenv.env['TMDB_API_KEY'] ?? '';
+  const apiKey = String.fromEnvironment('TMDB_API_KEY');
+  const baseUrl = String.fromEnvironment('TMDB_BASE_URL');
+
+  assert(
+    apiKey.isNotEmpty,
+    'TMDB_API_KEY is not defined. Compile with --dart-define-from-file=config/dev.json',
+  );
+  assert(
+    baseUrl.isNotEmpty,
+    'TMDB_BASE_URL is not defined. Compile with --dart-define-from-file=config/dev.json',
+  );
+
   final dio = Dio(
     BaseOptions(
-      baseUrl: dotenv.env['TMDB_BASE_URL'] ?? 'https://api.themoviedb.org/3',
+      baseUrl: baseUrl,
       queryParameters: {'api_key': apiKey, 'language': 'en-US'},
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
@@ -275,43 +285,60 @@ class TMDBService {
     final cleanId = companyId.trim();
     final List<Map<String, dynamic>> combined = [];
 
-    Future<List<Map<String, dynamic>>> fetchAllPages(String endpoint, String mediaType) async {
+    Future<List<Map<String, dynamic>>> fetchAllPages(
+      String endpoint,
+      String mediaType,
+    ) async {
       final List<Map<String, dynamic>> results = [];
       try {
         final response = await _dio.get(
           endpoint,
-          queryParameters: {'with_companies': cleanId, 'page': 1, 'include_adult': true},
+          queryParameters: {
+            'with_companies': cleanId,
+            'page': 1,
+            'include_adult': true,
+          },
         );
 
         if (response.statusCode == 200) {
           final List page1Results = response.data['results'] ?? [];
-          results.addAll(page1Results.map((item) {
-            final map = Map<String, dynamic>.from(item);
-            map['media_type'] = mediaType;
-            return map;
-          }));
+          results.addAll(
+            page1Results.map((item) {
+              final map = Map<String, dynamic>.from(item);
+              map['media_type'] = mediaType;
+              return map;
+            }),
+          );
 
           final totalPages = response.data['total_pages'] ?? 1;
-          
+
           if (totalPages > 1) {
             final maxPages = totalPages > 25 ? 25 : totalPages;
             final futures = <Future<Response>>[];
             for (int p = 2; p <= maxPages; p++) {
-              futures.add(_dio.get(
-                endpoint,
-                queryParameters: {'with_companies': cleanId, 'page': p, 'include_adult': true},
-              ));
+              futures.add(
+                _dio.get(
+                  endpoint,
+                  queryParameters: {
+                    'with_companies': cleanId,
+                    'page': p,
+                    'include_adult': true,
+                  },
+                ),
+              );
             }
 
             final responses = await Future.wait(futures);
             for (var resp in responses) {
               if (resp.statusCode == 200) {
                 final List pageResults = resp.data['results'] ?? [];
-                results.addAll(pageResults.map((item) {
-                  final map = Map<String, dynamic>.from(item);
-                  map['media_type'] = mediaType;
-                  return map;
-                }));
+                results.addAll(
+                  pageResults.map((item) {
+                    final map = Map<String, dynamic>.from(item);
+                    map['media_type'] = mediaType;
+                    return map;
+                  }),
+                );
               }
             }
           }
