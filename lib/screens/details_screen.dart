@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/tmdb_service.dart';
+import '../services/speed_service.dart';
+import '../services/uiiu_service.dart';
 
 class DetailsScreen extends ConsumerStatefulWidget {
   final String type; // 'movie' or 'tv'
@@ -19,7 +21,12 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
   List<Map<String, dynamic>> _episodes = [];
   List<Map<String, dynamic>> _watchProviders = [];
   List<Map<String, dynamic>> _cast = [];
+  List<Map<String, String>> _speedPornServers = [];
+  List<Map<String, String>> _uiiUMovieServers = [];
   bool _isLoading = true;
+  bool _isSpeedPornAvailable = false;
+  bool _isUiiUMovieAvailable = false;
+  bool _areStreamersExpanded = false;
   int _selectedSeason = 1;
   int _numberOfSeasons = 1;
 
@@ -35,18 +42,52 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
 
     if (details != null) {
       final tmdbId = details['id']?.toString() ?? widget.id;
-      
-      // Parallel fetch credits and watch providers
+
+      // Parallel fetch credits, watch providers, SpeedPorn and UiiUMovie availability
       final creditsFuture = service.getCredits(tmdbId, widget.type);
       final providersFuture = service.getWatchProviders(tmdbId, widget.type);
-      
-      final results = await Future.wait([creditsFuture, providersFuture]);
+
+      final title = details['title'] ?? details['name'] ?? '';
+      final year = details['release_date']?.toString().split('-').first ?? '';
+
+      Future<List<Map<String, String>>> speedPornFuture = Future.value([]);
+      Future<List<Map<String, String>>> uiiumovieFuture = Future.value([]);
+
+      if (title.isNotEmpty) {
+        final slug = title
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+            .trim()
+            .replaceAll(RegExp(r'\s+'), '-');
+        speedPornFuture = ref
+            .read(speedPornServiceProvider)
+            .fetchEmbedServers(slug);
+
+        if (year.isNotEmpty) {
+          uiiumovieFuture = ref
+              .read(uiiUMovieServiceProvider)
+              .fetchEmbedServers(slug, year);
+        }
+      }
+
+      final results = await Future.wait([
+        creditsFuture,
+        providersFuture,
+        speedPornFuture,
+        uiiumovieFuture,
+      ]);
       final credits = results[0] as List<Map<String, dynamic>>;
       final providersData = results[1] as Map<String, dynamic>?;
+      final speedPornServers = results[2] as List<Map<String, String>>;
+      final uiiumovieServers = results[3] as List<Map<String, String>>;
 
       if (mounted) {
         setState(() {
           _cast = credits;
+          _speedPornServers = speedPornServers;
+          _uiiUMovieServers = uiiumovieServers;
+          _isSpeedPornAvailable = speedPornServers.isNotEmpty;
+          _isUiiUMovieAvailable = uiiumovieServers.isNotEmpty;
         });
       }
 
@@ -100,14 +141,21 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
     }
   }
 
-  void _showEnlargedBackdrop(BuildContext context, String imageUrl, String title) {
+  void _showEnlargedBackdrop(
+    BuildContext context,
+    String imageUrl,
+    String title,
+  ) {
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.9),
       builder: (ctx) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,
@@ -122,9 +170,12 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                     imageUrl: imageUrl,
                     fit: BoxFit.contain,
                     placeholder: (context, url) => const Center(
-                      child: CircularProgressIndicator(color: Color(0xFFE50914)),
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFE50914),
+                      ),
                     ),
-                    errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: 60),
+                    errorWidget: (context, url, error) =>
+                        const Icon(Icons.broken_image, size: 60),
                   ),
                 ),
               ),
@@ -214,7 +265,11 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                 GestureDetector(
                   onTap: () {
                     if (backdropUrl != null) {
-                      _showEnlargedBackdrop(context, backdropUrl, title.toString());
+                      _showEnlargedBackdrop(
+                        context,
+                        backdropUrl,
+                        title.toString(),
+                      );
                     }
                   },
                   child: Stack(
@@ -225,7 +280,9 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                         decoration: BoxDecoration(
                           image: backdropUrl != null
                               ? DecorationImage(
-                                  image: CachedNetworkImageProvider(backdropUrl),
+                                  image: CachedNetworkImageProvider(
+                                    backdropUrl,
+                                  ),
                                   fit: BoxFit.cover,
                                 )
                               : null,
@@ -305,6 +362,48 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                           ),
                         ),
                       ),
+                      if (_isSpeedPornAvailable) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE50914),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'SPEEDPORN AVAILABLE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (_isUiiUMovieAvailable) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE50914),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'UIIUMOVIE AVAILABLE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(width: 12),
                       const Icon(Icons.star, color: Colors.amber, size: 16),
                       const SizedBox(width: 4),
@@ -319,30 +418,175 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                   ),
                   const SizedBox(height: 12),
                   if (widget.type == 'movie') ...[
-                    // Play Movie Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE50914),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text(
-                          'Play',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        onPressed: () =>
-                            context.push('/player/movie/${widget.id}'),
+                    const Text(
+                      'Streamers',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    ...(() {
+                      final List<Map<String, String>> streamers = [];
+                      for (var s in _speedPornServers) {
+                        streamers.add({
+                          'name': s['name'] ?? 'SpeedPorn Server',
+                          'url': s['embedUrl']!,
+                          'icon': s['iconUrl'] ?? '',
+                        });
+                      }
+                      for (var s in _uiiUMovieServers) {
+                        streamers.add({
+                          'name': s['name'] ?? 'UiiUMovie Server',
+                          'url': s['embedUrl']!,
+                          'icon': s['iconUrl'] ?? '',
+                        });
+                      }
+                      final mainServer = {
+                        'name': 'Main Server',
+                        'url':
+                            'https://vaplayer.ru/embed/movie/${widget.id}?primaryColor=%23E50914',
+                        'icon': 'asset',
+                      };
+
+                      if (streamers.length >= 2) {
+                        streamers.add(mainServer);
+                      } else {
+                        streamers.insert(0, mainServer);
+                      }
+
+                      final showExpandButton = streamers.length > 2;
+                      final visibleStreamers =
+                          (showExpandButton && !_areStreamersExpanded)
+                          ? streamers.take(2).toList()
+                          : streamers;
+
+                      final List<Widget> children = [];
+                      for (var s in visibleStreamers) {
+                        children.add(
+                          GestureDetector(
+                            onTap: () {
+                              final encodedUrl = Uri.encodeComponent(s['url']!);
+                              context.push(
+                                '/player/movie/${widget.id}?url=$encodedUrl',
+                              );
+                            },
+                            child: Column(
+                              crossAxisAlignment: .center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: const Color(0xFF1A1A1A),
+                                    border: Border.all(
+                                      color: Colors.grey.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: ClipOval(
+                                    child: s['icon'] == 'asset'
+                                        ? Image.asset(
+                                            'assets/app_icon.png',
+                                            fit: BoxFit.cover,
+                                          )
+                                        : (s['icon'] != null &&
+                                              s['icon']!.isNotEmpty)
+                                        ? CachedNetworkImage(
+                                            imageUrl: s['icon']!,
+                                            fit: BoxFit.contain,
+                                            placeholder: (context, url) =>
+                                                const Icon(
+                                                  Icons.play_arrow,
+                                                  color: Color(0xFFE50914),
+                                                ),
+                                            errorWidget:
+                                                (context, url, error) =>
+                                                    const Icon(
+                                                      Icons.play_arrow,
+                                                      color: Color(0xFFE50914),
+                                                    ),
+                                          )
+                                        : const Icon(
+                                            Icons.play_arrow,
+                                            color: Color(0xFFE50914),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  width: 50,
+                                  child: Text(
+                                    s['name']!,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      if (showExpandButton) {
+                        children.add(
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _areStreamersExpanded = !_areStreamersExpanded;
+                              });
+                            },
+                            child: Column(
+                              mainAxisAlignment: .center,
+                              crossAxisAlignment: .center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: const Color(0xFF1A1A1A),
+                                    border: Border.all(
+                                      color: Colors.grey.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    _areStreamersExpanded
+                                        ? Icons.keyboard_arrow_up
+                                        : Icons.more_horiz,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  width: 50,
+                                  child: Text(
+                                    _areStreamersExpanded ? 'Less' : 'More',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      return [
+                        Wrap(spacing: 14, runSpacing: 14, children: children),
+                      ];
+                    })(),
                     const SizedBox(height: 16),
                   ],
                   if (genres.isNotEmpty) ...[
@@ -486,7 +730,9 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                                       ],
                                       image: profileUrl != null
                                           ? DecorationImage(
-                                              image: CachedNetworkImageProvider(profileUrl),
+                                              image: CachedNetworkImageProvider(
+                                                profileUrl,
+                                              ),
                                               fit: BoxFit.cover,
                                             )
                                           : null,
@@ -535,7 +781,8 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                   ],
                   if (_details != null &&
                       _details!['production_companies'] != null &&
-                      (_details!['production_companies'] as List).isNotEmpty) ...[
+                      (_details!['production_companies'] as List)
+                          .isNotEmpty) ...[
                     const Text(
                       'Production Companies',
                       style: TextStyle(
@@ -549,9 +796,11 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                       height: 52,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
-                        itemCount: (_details!['production_companies'] as List).length,
+                        itemCount:
+                            (_details!['production_companies'] as List).length,
                         itemBuilder: (context, index) {
-                          final company = _details!['production_companies'][index];
+                          final company =
+                              _details!['production_companies'][index];
                           final logoPath = company['logo_path'];
                           final logoUrl = logoPath != null
                               ? 'https://image.tmdb.org/t/p/w154$logoPath'
@@ -571,7 +820,9 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                                   height: 44,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: logoUrl != null ? Colors.white : const Color(0xFF2A2A2A),
+                                    color: logoUrl != null
+                                        ? Colors.white
+                                        : const Color(0xFF2A2A2A),
                                     border: Border.all(
                                       color: Colors.white24,
                                       width: 1,
@@ -585,7 +836,9 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                                     ],
                                     image: logoUrl != null
                                         ? DecorationImage(
-                                            image: CachedNetworkImageProvider(logoUrl),
+                                            image: CachedNetworkImageProvider(
+                                              logoUrl,
+                                            ),
                                             fit: BoxFit.contain,
                                           )
                                         : null,
@@ -593,7 +846,9 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                                   child: logoUrl == null
                                       ? Center(
                                           child: Text(
-                                            companyName.isNotEmpty ? companyName[0] : '?',
+                                            companyName.isNotEmpty
+                                                ? companyName[0]
+                                                : '?',
                                             style: const TextStyle(
                                               color: Colors.white70,
                                               fontWeight: FontWeight.bold,

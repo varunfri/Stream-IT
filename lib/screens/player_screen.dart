@@ -5,12 +5,20 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../services/tmdb_service.dart';
 import '../services/recently_watched_service.dart';
+import '../services/speed_service.dart';
+import '../services/uiiu_service.dart';
+import 'package:adblocker_webview/adblocker_webview.dart';
+// ignore: implementation_imports
+import 'package:adblocker_webview/src/block_resource_loading.dart';
+// ignore: implementation_imports
+import 'package:adblocker_webview/src/elem_hide.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String type; // 'movie' or 'tv'
   final String id;
   final int season;
   final int episode;
+  final String? embedUrl;
 
   const PlayerScreen({
     super.key,
@@ -18,6 +26,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
     required this.id,
     this.season = 1,
     this.episode = 1,
+    this.embedUrl,
   });
 
   @override
@@ -29,46 +38,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
   bool _isInPipMode = false;
-  late final String _embedUrl;
+  String? _embedUrl;
 
   // JavaScript injected after each page load:
-  // 1. Kills window.open() – prevents popup tabs from ever opening.
-  // 2. Traps document-level clicks – swallows clicks on <a> tags pointing
-  //    outside of vaplayer.ru before the browser can navigate.
-  // 3. Overrides window.location setter – silently drops JS-driven redirects.
+  // Kills window.open() – prevents popup tabs from ever opening.
   static const String _adBlockJs = r"""
 (function() {
-  // 1. Kill popup windows
   window.open = function() { return null; };
-
-  // 2. Block <a> clicks to external domains
-  document.addEventListener('click', function(e) {
-    var el = e.target;
-    while (el && el.tagName !== 'A') { el = el.parentElement; }
-    if (el && el.href &&
-        !el.href.includes('vaplayer.ru') &&
-        !el.href.startsWith('about:') &&
-        !el.href.startsWith('javascript:')) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    }
-  }, true);
-
-  // 3. Intercept window.location = '...' assignments
-  try {
-    var _origLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      get: function() { return _origLocation; },
-      set: function(v) {
-        var s = String(v);
-        if (s.includes('vaplayer.ru') || s.startsWith('about:') || s.startsWith('javascript:')) {
-          _origLocation.href = s;
-        }
-        // Otherwise silently drop the redirect
-      },
-      configurable: true
-    });
-  } catch(e) {}
 })();
 """;
 
@@ -88,19 +64,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
       }
     });
-
-    if (widget.type == 'movie') {
-      _embedUrl =
-          'https://vaplayer.ru/embed/movie/${widget.id}?primaryColor=%23E50914';
-    } else {
-      if (widget.id.startsWith('tt')) {
-        _embedUrl =
-            'https://vaplayer.ru/embed/tv/${widget.id}?primaryColor=%23E50914';
-      } else {
-        _embedUrl =
-            'https://vaplayer.ru/embed/tv/${widget.id}/${widget.season}/${widget.episode}?primaryColor=%23E50914';
-      }
-    }
 
     // ── Screen awake + landscape ─────────────────────────────────────────
     WakelockPlus.enable(); // prevent screen sleep
@@ -122,25 +85,77 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         NavigationDelegate(
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url;
-            // Allow only the streaming domain and internal browser pages
-            if (url.contains('vaplayer.ru') ||
+
+            // Check if EasyList blocks the resource URL first
+            if (AdBlockerWebviewController.instance.shouldBlockResource(url)) {
+              debugPrint('PlayerScreen [EASYLIST BLOCKED]: $url');
+              return NavigationDecision.prevent;
+            }
+
+            final lowerUrl = url.toLowerCase();
+            final allowedKeywords = [
+              'vaplayer.ru',
+              'speedporn.net',
+              'uiiumovie.in',
+              'mixdrop',
+              'mxdrop',
+              'miiixdrop',
+              'streamtape',
+              'terabox',
+              'terasharefile',
+              'jodwish',
+              'dood',
+              'voe.sx',
+              'voe.sh',
+              '1fichier',
+              'streamvid',
+              'vidoza',
+              'filemoon',
+              'vidguard',
+              'hgcloud',
+              'hanerix',
+            ];
+
+            bool isAllowed = false;
+            for (var kw in allowedKeywords) {
+              if (lowerUrl.contains(kw)) {
+                isAllowed = true;
+                break;
+              }
+            }
+
+            if (isAllowed ||
                 url.startsWith('about:') ||
                 url.startsWith('javascript:')) {
               return NavigationDecision.navigate;
             }
-            // DNS-style block: silently drop everything else —
-            // no back(), no reload(), no restart of the video.
+            // DNS-style block: silently drop everything else
             debugPrint('PlayerScreen [BLOCKED]: $url');
             return NavigationDecision.prevent;
           },
           onPageStarted: (url) {
             debugPrint('PlayerScreen: Page started → $url');
             if (mounted) setState(() => _isLoading = true);
+
+            // Inject EasyList resource blocker script as early as possible
+            final rules = AdBlockerWebviewController.instance.allResourceRules;
+            _controller.runJavaScript(getResourceLoadingBlockerScript(rules));
+
+            // Apply element hiding after page load starts
+            final cssRules = AdBlockerWebviewController.instance
+                .getCssRulesForWebsite(url);
+            _controller.runJavaScript(generateHidingScript(cssRules));
           },
           onPageFinished: (url) {
             debugPrint('PlayerScreen: Page finished → $url');
             if (mounted) setState(() => _isLoading = false);
-            // Inject ad-block JS every time a page finishes loading
+
+            // Apply element hiding after page load finishes
+            final cssRules = AdBlockerWebviewController.instance
+                .getCssRulesForWebsite(url);
+            _controller.runJavaScript(generateHidingScript(cssRules));
+
+            // Inject our custom click/redirect blocker
             _controller.runJavaScript(_adBlockJs);
           },
           onWebResourceError: (error) {
@@ -150,8 +165,87 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             if (mounted) setState(() => _isLoading = false);
           },
         ),
-      )
-      ..loadRequest(Uri.parse(_embedUrl));
+      );
+
+    _loadPlayerUrl();
+  }
+
+  Future<void> _loadPlayerUrl() async {
+    try {
+      String? resolvedUrl = widget.embedUrl;
+
+      // If not passed from outside, do default resolution
+      if (resolvedUrl == null) {
+        final tmdbService = ref.read(tmdbServiceProvider);
+        final speedPornService = ref.read(speedPornServiceProvider);
+
+        // 1. Fetch details to check if there is a SpeedPorn or UiiUMovie match (by title slug)
+        final details = await tmdbService.getContentDetails(
+          widget.id,
+          widget.type,
+        );
+        if (details != null) {
+          final title = details['title'] ?? details['name'] ?? '';
+          final year =
+              details['release_date']?.toString().split('-').first ?? '';
+
+          if (title.isNotEmpty) {
+            final slug = title
+                .toLowerCase()
+                .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+                .trim()
+                .replaceAll(RegExp(r'\s+'), '-');
+
+            final servers = await speedPornService.fetchEmbedServers(slug);
+            if (servers.isNotEmpty) {
+              resolvedUrl = servers.first['embedUrl'];
+              debugPrint(
+                'PlayerScreen: Resolved SpeedPorn server: $resolvedUrl',
+              );
+            } else if (year.isNotEmpty) {
+              final uiiuServers = await ref
+                  .read(uiiUMovieServiceProvider)
+                  .fetchEmbedServers(slug, year);
+              if (uiiuServers.isNotEmpty) {
+                resolvedUrl = uiiuServers.first['embedUrl'];
+                debugPrint(
+                  'PlayerScreen: Resolved UiiUMovie server: $resolvedUrl',
+                );
+              }
+            }
+          }
+        }
+
+        // 2. Default fallback to vaplayer.ru if no SpeedPorn servers are resolved
+        if (resolvedUrl == null) {
+          if (widget.type == 'movie') {
+            resolvedUrl =
+                'https://vaplayer.ru/embed/movie/${widget.id}?primaryColor=%23E50914';
+          } else {
+            if (widget.id.startsWith('tt')) {
+              resolvedUrl =
+                  'https://vaplayer.ru/embed/tv/${widget.id}?primaryColor=%23E50914';
+            } else {
+              resolvedUrl =
+                  'https://vaplayer.ru/embed/tv/${widget.id}/${widget.season}/${widget.episode}?primaryColor=%23E50914';
+            }
+          }
+          debugPrint('PlayerScreen: Resolved default vaplayer: $resolvedUrl');
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _embedUrl = resolvedUrl;
+        });
+        await _controller.loadRequest(Uri.parse(resolvedUrl));
+      }
+    } catch (e) {
+      debugPrint('Error loading player url: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -222,7 +316,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isInPipMode) {
-      return WebViewWidget(controller: _controller);
+      return _embedUrl != null
+          ? WebViewWidget(controller: _controller)
+          : const SizedBox.shrink();
     }
 
     return Scaffold(
@@ -231,8 +327,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       body: Stack(
         children: [
           // Full-screen webview — no SafeArea so it truly fills the landscape display
-          WebViewWidget(controller: _controller),
-          if (_isLoading)
+          if (_embedUrl != null) WebViewWidget(controller: _controller),
+          if (_isLoading || _embedUrl == null)
             const Center(
               child: CircularProgressIndicator(color: Color(0xFFE50914)),
             ),

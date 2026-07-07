@@ -22,7 +22,10 @@ void main() async {
   // Initialize AdBlocker filter lists
   try {
     await AdBlockerWebviewController.instance.initialize(
-      FilterConfig(filterTypes: [FilterType.easyList, FilterType.adGuard]),
+      FilterConfig(
+        filterTypes: [FilterType.easyList, FilterType.adGuard],
+        blockedDomains: const ['adexchangerapid.com'],
+      ),
     );
   } catch (e) {
     debugPrint("Could not initialize AdBlockerWebviewController: $e");
@@ -68,11 +71,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               int.tryParse(state.uri.queryParameters['season'] ?? '1') ?? 1;
           final episode =
               int.tryParse(state.uri.queryParameters['episode'] ?? '1') ?? 1;
+          final embedUrl = state.uri.queryParameters['url'];
           return PlayerScreen(
             type: type,
             id: id,
             season: season,
             episode: episode,
+            embedUrl: embedUrl,
           );
         },
       ),
