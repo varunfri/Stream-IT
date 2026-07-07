@@ -25,8 +25,10 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
+  static const _pipChannel = MethodChannel('com.example.vid_api/pip');
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _isInPipMode = false;
   late final String _embedUrl;
 
   // JavaScript injected after each page load:
@@ -74,6 +76,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void initState() {
     super.initState();
     _saveToRecentlyWatched();
+    _enablePip();
+
+    _pipChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onPipModeChanged') {
+        final bool inPip = call.arguments as bool;
+        if (mounted) {
+          setState(() {
+            _isInPipMode = inPip;
+          });
+        }
+      }
+    });
 
     if (widget.type == 'movie') {
       _embedUrl =
@@ -142,6 +156,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
+    _disablePip();
+    _pipChannel.setMethodCallHandler(null);
     // ── Restore to portrait + re-enable system UI ────────────────────────
     WakelockPlus.disable();
     SystemChrome.setPreferredOrientations([
@@ -150,6 +166,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  Future<void> _enablePip() async {
+    try {
+      await _pipChannel.invokeMethod('enablePip');
+    } catch (e) {
+      debugPrint('Error enabling PiP: $e');
+    }
+  }
+
+  Future<void> _disablePip() async {
+    try {
+      await _pipChannel.invokeMethod('disablePip');
+    } catch (e) {
+      debugPrint('Error disabling PiP: $e');
+    }
+  }
+
+  Future<void> _enterPip() async {
+    try {
+      await _pipChannel.invokeMethod('enterPip');
+    } catch (e) {
+      debugPrint('Error entering PiP: $e');
+    }
   }
 
   Future<void> _saveToRecentlyWatched() async {
@@ -181,6 +221,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isInPipMode) {
+      return WebViewWidget(controller: _controller);
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
@@ -204,12 +248,38 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   borderRadius: BorderRadius.circular(24),
                   child: Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: Colors.black54,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.arrow_back,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Minimal PiP button in top-right
+          Positioned(
+            bottom: 8,
+            left: MediaQuery.of(context).size.width * 0.43,
+            child: SafeArea(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _enterPip,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.picture_in_picture_alt,
                       color: Colors.white,
                       size: 22,
                     ),

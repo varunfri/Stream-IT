@@ -1,0 +1,36 @@
+name: Build and Release Local APK
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers the workflow when you push a version tag like v1.0.0
+
+jobs:
+  build:
+    # Forces the job to execute on your registered local machine
+    runs-on: [self-hosted, local-android-runner]
+
+    steps:
+      # Step 1: Fetch your code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step 2: Grant execution permissions to Gradle wrapper (Linux/macOS)
+      - name: Grant Execute Permission for Gradle
+        run: chmod +x ./gradlew
+
+      # Step 3: Compile the Release APK using local Gradle
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+
+      # Step 4: Create a GitHub Release and upload the generated APK
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release. Barb # Double check this path matches your project structure
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
