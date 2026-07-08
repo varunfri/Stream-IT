@@ -1,6 +1,6 @@
-# Vid API
+# Stream-IT
 
-Vid API is a premium, feature-rich Flutter client for browsing movies and TV shows powered by the **The Movie Database (TMDB)** API.
+Stream-IT is a premium, feature-rich Flutter client for browsing movies and TV shows powered by the **The Movie Database (TMDB)** API.
 
 It is designed with a sleek dark-themed layout, smooth micro-interactions, robust network handling, and extensive content details (cast profiles, production companies, and zoomable artwork).
 
