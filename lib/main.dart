@@ -13,6 +13,7 @@ import 'screens/details_screen.dart';
 import 'screens/player_screen.dart';
 import 'screens/company_screen.dart';
 import 'screens/person_screen.dart';
+import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,13 +23,22 @@ void main() async {
   await Hive.openBox(SearchHistoryService.boxName);
   await Hive.openBox(RecentlyWatchedService.boxName);
   await SettingsService().init();
+  if (defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.macOS) {
+    await windowManager.ensureInitialized();
+  }
 
   // Initialize AdBlocker filter lists
   try {
     await AdBlockerWebviewController.instance.initialize(
       FilterConfig(
         filterTypes: [FilterType.easyList, FilterType.adGuard],
-        blockedDomains: const ['adexchangerapid.com'],
+        blockedDomains: const [
+          'adexchangerapid.com',
+          'skimosaglet.shop',
+          'indoneviler.rest',
+        ],
       ),
     );
   } catch (e) {
@@ -38,9 +48,12 @@ void main() async {
   runApp(const ProviderScope(child: MyApp()));
 }
 
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
 // Router Configuration
 final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     routes: [
       GoRoute(path: '/', builder: (context, state) => const MainScreen()),
@@ -123,16 +136,22 @@ class _MyAppState extends ConsumerState<MyApp> {
     final meta = HardwareKeyboard.instance.isMetaPressed;
 
     // Esc → go back
+    // Esc → go back (Global block for GoRouter)
     if (key == LogicalKeyboardKey.escape) {
-      if (_router.canPop()) {
-        _router.pop();
-        return true; // consumed
+      final NavigatorState? navState = rootNavigatorKey.currentState;
+
+      // Check if the router navigation stack actually has routes to pop
+      if (navState != null && navState.canPop()) {
+        navState.pop(); // Pops the top contextual page from the screen stack
+        return true; // Keyboard event consumed
       }
     }
 
-    // Cmd+W → quit
-    if (meta && key == LogicalKeyboardKey.keyW) {
-      SystemNavigator.pop();
+    // Cmd+F → toggle full screen
+    if (meta && key == LogicalKeyboardKey.keyF) {
+      windowManager.isFullScreen().then((isFull) {
+        windowManager.setFullScreen(!isFull);
+      });
       return true;
     }
 
@@ -145,6 +164,17 @@ class _MyAppState extends ConsumerState<MyApp> {
     return MaterialApp.router(
       title: 'Stream IT',
       debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.dark,
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF141414),
+        primaryColor: const Color(0xFFE50914),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFE50914),
+          secondary: Color(0xFFE50914),
+        ),
+        useMaterial3: true,
+      ),
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF141414),

@@ -13,6 +13,41 @@ import 'package:adblocker_webview/adblocker_webview.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
+const _allowed = [
+  'vaplayer.ru',
+  'speedporn.net',
+  'uiiumovie.in',
+  'mixdrop',
+  'mxdrop',
+  'miiixdrop',
+  'miiiixdrop',
+  'xdrop',
+  'streamtape',
+  'terabox',
+  'terasharefile',
+  'jodwish',
+  'dood',
+  'voe.sx',
+  'voe.sh',
+  'voe',
+  'pamelachangemission',
+  '1fichier',
+  'streamvid',
+  'vidoza',
+  'filemoon',
+  'vidguard',
+  'hgcloud',
+  'hanerix',
+  'vip.seekplayer.vip',
+  'p.easyvidplayer.com',
+  'vip.player4me.vip',
+  'my.player4me.online',
+  'my.embedseek.online',
+  'luluvid.com',
+  'luluvdo.com',
+  'my.upns.online',
+];
+
 class PlayerScreen extends ConsumerStatefulWidget {
   final String type; // 'movie' or 'tv'
   final String id;
@@ -127,33 +162,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           }
 
           final lowerUrl = url.toLowerCase();
-          final allowedKeywords = [
-            'vaplayer.ru',
-            'speedporn.net',
-            'uiiumovie.in',
-            'mixdrop',
-            'mxdrop',
-            'miiixdrop',
-            'miiiixdrop',
-            'xdrop',
-            'streamtape',
-            'terabox',
-            'terasharefile',
-            'jodwish',
-            'dood',
-            'voe.sx',
-            'voe.sh',
-            'voe',
-            'pamelachangemission',
-            '1fichier',
-            'streamvid',
-            'vidoza',
-            'filemoon',
-            'vidguard',
-            'hgcloud',
-            'hanerix',
-            'vip.seekplayer.vip',
-          ];
+          final allowedKeywords = _allowed;
 
           bool isAllowed = false;
           for (var kw in allowedKeywords) {
