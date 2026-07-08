@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../services/tmdb_service.dart';
 import '../services/search_history_service.dart';
+import '../services/settings_service.dart';
 import '../widgets/poster_card.dart';
+import 'package:local_auth/local_auth.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -61,8 +63,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       }
     });
   }
-
-
 
   Future<void> _deleteHistoryItem(String id) async {
     await _historyService.removeItem(id);
@@ -448,6 +448,150 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     );
   }
 
+  void _showSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final settings = SettingsService();
+
+            Future<void> handleLockToggle(bool value) async {
+              final auth = LocalAuthentication();
+              try {
+                final bool canAuthenticateWithBiometrics =
+                    await auth.canCheckBiometrics;
+                final bool canAuthenticate =
+                    canAuthenticateWithBiometrics ||
+                    await auth.isDeviceSupported();
+
+                if (!canAuthenticate) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Device security / lock not set up or supported.',
+                        ),
+                      ),
+                    );
+                  }
+                  return;
+                }
+
+                final bool didAuthenticate = await auth.authenticate(
+                  localizedReason: value
+                      ? 'Authenticate to enable app lock'
+                      : 'Authenticate to disable app lock',
+                  biometricOnly: false,
+                );
+
+                if (didAuthenticate) {
+                  settings.isLockEnabled = value;
+                  setDialogState(() {});
+                }
+              } catch (e) {
+                debugPrint('LocalAuth error: $e');
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Not able to Authenticate.')),
+                  );
+                }
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1F1F1F),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.settings, color: Color(0xFFE50914)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Settings',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE50914),
+                      title: const Text(
+                        'Include Adult Content',
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                      subtitle: const Text(
+                        'Include adult (18+) movies/shows in search results',
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                      value: settings.includeAllInSearch,
+                      onChanged: (val) {
+                        settings.includeAllInSearch = val;
+                        setDialogState(() {});
+                      },
+                    ),
+                    const Divider(color: Colors.white12),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE50914),
+                      title: const Text(
+                        'Use Custom Connection Adapter',
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                      subtitle: const Text(
+                        'Enable DoH and static bypasses for blocked endpoints',
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                      value: settings.useCustomAdapter,
+                      onChanged: (val) {
+                        settings.useCustomAdapter = val;
+                        setDialogState(() {});
+                      },
+                    ),
+                    const Divider(color: Colors.white12),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE50914),
+                      title: const Text(
+                        'Screen Lock Protection',
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                      subtitle: const Text(
+                        'Require fingerprint/PIN/pattern to access the app',
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                      value: settings.isLockEnabled,
+                      onChanged: (val) {
+                        handleLockToggle(val);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(
+                      color: Color(0xFFE50914),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSearching = _searchController.text.isNotEmpty;
@@ -468,7 +612,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             decoration: InputDecoration(
               hintText: 'Search movies, TV shows…',
               hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
-              prefixIcon: const Icon(Icons.search, color: Colors.grey),
+              // prefixIcon: IconButton(
+              //   icon: const Icon(Icons.settings, color: Colors.grey),
+              //   onPressed: () => _showSettingsDialog(context),
+              // ),
               suffixIcon: isSearching
                   ? IconButton(
                       icon: const Icon(Icons.clear, color: Colors.grey),
@@ -480,7 +627,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         });
                       },
                     )
-                  : null,
+                  : IconButton(
+                      icon: const Icon(Icons.settings, color: Colors.grey),
+                      onPressed: () => _showSettingsDialog(context),
+                    ),
               filled: true,
               fillColor: const Color(0xFF2A2A2A),
               contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -502,56 +652,56 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               child: CircularProgressIndicator(color: Color(0xFFE50914)),
             )
           : isSearching
-              ? Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: 8.0,
+          ? Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
+                  child: Row(
+                    children: [
+                      _buildTabButton(
+                        0,
+                        'Movies & TV (${_searchResults.length})',
                       ),
-                      child: Row(
-                        children: [
-                          _buildTabButton(
-                            0,
-                            'Movies & TV (${_searchResults.length})',
-                          ),
-                          const SizedBox(width: 16),
-                          _buildTabButton(
-                            1,
-                            'Companies (${_companyResults.length})',
-                          ),
-                        ],
+                      const SizedBox(width: 16),
+                      _buildTabButton(
+                        1,
+                        'Companies (${_companyResults.length})',
                       ),
-                    ),
-                    const Divider(color: Colors.white10, height: 1),
-                    Expanded(
-                      child: _selectedTabIndex == 0
-                          ? (_searchResults.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    'No results found',
-                                    style: TextStyle(
-                                      color: Colors.grey[500],
-                                      fontSize: 15,
-                                    ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white10, height: 1),
+                Expanded(
+                  child: _selectedTabIndex == 0
+                      ? (_searchResults.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No results found',
+                                  style: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 15,
                                   ),
-                                )
-                              : _buildResultsGrid())
-                          : (_companyResults.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    'No companies found',
-                                    style: TextStyle(
-                                      color: Colors.grey[500],
-                                      fontSize: 15,
-                                    ),
+                                ),
+                              )
+                            : _buildResultsGrid())
+                      : (_companyResults.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No companies found',
+                                  style: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 15,
                                   ),
-                                )
-                              : _buildCompanyGrid()),
-                    ),
-                  ],
-                )
-              : _buildHistoryPanel(),
+                                ),
+                              )
+                            : _buildCompanyGrid()),
+                ),
+              ],
+            )
+          : _buildHistoryPanel(),
     );
   }
 }

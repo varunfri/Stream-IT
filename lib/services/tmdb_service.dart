@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/custom_dns_adapter.dart';
+import 'settings_service.dart';
 
 final tmdbDioProvider = Provider<Dio>((ref) {
   const apiKey = String.fromEnvironment('TMDB_API_KEY');
@@ -143,7 +144,10 @@ class TMDBService {
       if (query.isEmpty) return [];
       final response = await _dio.get(
         '/search/multi',
-        queryParameters: {'query': query, 'include_adult': true},
+        queryParameters: {
+          'query': query,
+          'include_adult': SettingsService().includeAllInSearch,
+        },
       );
       if (response.statusCode == 200) {
         final results = List<Map<String, dynamic>>.from(
@@ -296,7 +300,7 @@ class TMDBService {
           queryParameters: {
             'with_companies': cleanId,
             'page': 1,
-            'include_adult': true,
+            'include_adult': SettingsService().includeAllInSearch,
           },
         );
 
@@ -322,7 +326,7 @@ class TMDBService {
                   queryParameters: {
                     'with_companies': cleanId,
                     'page': p,
-                    'include_adult': true,
+                    'include_adult': SettingsService().includeAllInSearch,
                   },
                 ),
               );

@@ -18,9 +18,61 @@ class SpeedPornService {
   }
 
   /// Scrapes the details page of a speedporn post to extract embed server urls
-  Future<List<Map<String, String>>> fetchEmbedServers(String slug) async {
-    final videoPageUrl = '$baseUrl/$slug/';
-    debugPrint('SpeedPornService: Fetching $videoPageUrl');
+  Future<List<Map<String, String>>> fetchEmbedServers(String title) async {
+    if (title.isEmpty) return [];
+
+    String videoPageUrl = '';
+    
+    // 1. Try to search SpeedPorn for the title first to avoid slug collisions
+    try {
+      final searchUrl = '$baseUrl/?s=${Uri.encodeComponent(title)}';
+      debugPrint('SpeedPornService: Searching $searchUrl');
+      final searchResponse = await _dio.get(
+        searchUrl,
+        options: Options(
+          headers: {
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        ),
+      );
+
+      if (searchResponse.statusCode == 200) {
+        final document = parse(searchResponse.data);
+        final anchors = document.querySelectorAll('a');
+        final cleanTitle = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\s]'), '').trim();
+
+        for (var a in anchors) {
+          final href = a.attributes['href'] ?? '';
+          final text = a.text.trim();
+          
+          if (href.startsWith('http') &&
+              href.contains('speedporn.net/') &&
+              !href.contains('?s=')) {
+            final cleanText = text.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\s]'), '').trim();
+            if (cleanText == cleanTitle) {
+              videoPageUrl = href;
+              debugPrint('SpeedPornService: Search matched: "$text" -> $videoPageUrl');
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('SpeedPornService: Search query failed: $e');
+    }
+
+    // 2. Fallback to default slug generation if no search match was found
+    if (videoPageUrl.isEmpty) {
+      final slug = title
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+          .trim()
+          .replaceAll(RegExp(r'\s+'), '-');
+      videoPageUrl = '$baseUrl/$slug/';
+      debugPrint('SpeedPornService: Fallback to slug URL: $videoPageUrl');
+    }
+
     try {
       final response = await _dio.get(
         videoPageUrl,

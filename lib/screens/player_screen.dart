@@ -196,7 +196,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 .trim()
                 .replaceAll(RegExp(r'\s+'), '-');
 
-            final servers = await speedPornService.fetchEmbedServers(slug);
+            final servers = await speedPornService.fetchEmbedServers(title);
             if (servers.isNotEmpty) {
               resolvedUrl = servers.first['embedUrl'];
               debugPrint(

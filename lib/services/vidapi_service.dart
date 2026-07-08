@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/content_item.dart';
 import '../utils/custom_dns_adapter.dart';
+import 'tmdb_service.dart';
 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
@@ -27,15 +29,73 @@ final vidApiService = Provider<VidApiService>((ref) {
   return VidApiService(ref.watch(dioProvider));
 });
 
-// Future Providers for UI state
+// Future Providers for UI state with fallback to TMDB Popular lists
 final latestMoviesProvider = FutureProvider<List<ContentItem>>((ref) async {
-  final service = ref.watch(vidApiService);
-  return service.getLatestMovies();
+  try {
+    final service = ref.watch(vidApiService);
+    return await service.getLatestMovies();
+  } catch (e) {
+    debugPrint("Failed to load latest movies from vidapi.ru: $e. Falling back to TMDB popular movies...");
+    try {
+      final tmdbService = ref.read(tmdbServiceProvider);
+      final popularList = await tmdbService.getSection('/movie/popular');
+      return popularList.map((item) {
+        final year = item['release_date']?.toString().split('-').first;
+        final posterPath = item['poster_path'];
+        final posterUrl = posterPath != null
+            ? (posterPath.startsWith('http')
+                ? posterPath
+                : 'https://image.tmdb.org/t/p/w500$posterPath')
+            : null;
+        return ContentItem(
+          tmdbId: item['id']?.toString(),
+          title: item['title'] ?? 'Unknown',
+          year: year,
+          posterUrl: posterUrl,
+          rating: item['vote_average']?.toString(),
+          type: 'movie',
+          embedUrl: '',
+        );
+      }).toList();
+    } catch (fallbackError) {
+      debugPrint("TMDB fallback failed: $fallbackError");
+      rethrow;
+    }
+  }
 });
 
 final latestTvShowsProvider = FutureProvider<List<ContentItem>>((ref) async {
-  final service = ref.watch(vidApiService);
-  return service.getLatestTvShows();
+  try {
+    final service = ref.watch(vidApiService);
+    return await service.getLatestTvShows();
+  } catch (e) {
+    debugPrint("Failed to load latest TV shows from vidapi.ru: $e. Falling back to TMDB popular TV shows...");
+    try {
+      final tmdbService = ref.read(tmdbServiceProvider);
+      final popularList = await tmdbService.getSection('/tv/popular');
+      return popularList.map((item) {
+        final year = item['first_air_date']?.toString().split('-').first;
+        final posterPath = item['poster_path'];
+        final posterUrl = posterPath != null
+            ? (posterPath.startsWith('http')
+                ? posterPath
+                : 'https://image.tmdb.org/t/p/w500$posterPath')
+            : null;
+        return ContentItem(
+          tmdbId: item['id']?.toString(),
+          title: item['name'] ?? 'Unknown',
+          year: year,
+          posterUrl: posterUrl,
+          rating: item['vote_average']?.toString(),
+          type: 'tv',
+          embedUrl: '',
+        );
+      }).toList();
+    } catch (fallbackError) {
+      debugPrint("TMDB fallback failed: $fallbackError");
+      rethrow;
+    }
+  }
 });
 
 class VidApiService {

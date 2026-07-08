@@ -61,7 +61,7 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
             .replaceAll(RegExp(r'\s+'), '-');
         speedPornFuture = ref
             .read(speedPornServiceProvider)
-            .fetchEmbedServers(slug);
+            .fetchEmbedServers(title);
 
         if (year.isNotEmpty) {
           uiiumovieFuture = ref

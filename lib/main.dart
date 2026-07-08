@@ -5,6 +5,7 @@ import 'package:adblocker_webview/adblocker_webview.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'services/search_history_service.dart';
 import 'services/recently_watched_service.dart';
+import 'services/settings_service.dart';
 import 'screens/main_screen.dart';
 import 'screens/details_screen.dart';
 import 'screens/player_screen.dart';
@@ -18,6 +19,7 @@ void main() async {
   await Hive.initFlutter();
   await Hive.openBox(SearchHistoryService.boxName);
   await Hive.openBox(RecentlyWatchedService.boxName);
+  await SettingsService().init();
 
   // Initialize AdBlocker filter lists
   try {

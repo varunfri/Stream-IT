@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';import '../services/settings_service.dart';
 
 /// A cache entry for resolved IP addresses.
 class _DnsCacheEntry {
@@ -42,43 +43,103 @@ class CustomDnsAdapter {
       createHttpClient: () {
         final client = HttpClient();
 
-        client
-            .connectionFactory = (Uri uri, String? proxyHost, int? proxyPort) async {
-          String targetHost = uri.host;
+        client.connectionFactory = (Uri uri, String? proxyHost, int? proxyPort) async {
+          if (!SettingsService().useCustomAdapter) {
+            final completer = Completer<Socket>();
+            Future<void> directConnect() async {
+              try {
+                final socket = await Socket.connect(
+                  uri.host,
+                  uri.port,
+                  timeout: const Duration(seconds: 10),
+                );
+                if (uri.scheme == 'https') {
+                  final secureSocket = await SecureSocket.secure(socket, host: uri.host);
+                  completer.complete(secureSocket);
+                } else {
+                  completer.complete(socket);
+                }
+              } catch (e) {
+                completer.completeError(e);
+              }
+            }
+            directConnect();
+            return ConnectionTask.fromSocket(completer.future, () {});
+          }
 
-          // 1. Check if we have a static DNS override mapping
-          if (dnsMap != null && dnsMap!.containsKey(uri.host)) {
-            targetHost = dnsMap![uri.host]!;
-            debugPrint(
-              '[CustomDnsAdapter] Static map hit: ${uri.host} -> $targetHost',
-            );
-          } else {
-            // 2. Perform dynamic DNS resolution using DoH (1.1.1.1 / 8.8.8.8)
-            final resolvedIp = await _resolveHostViaDoh(uri.host);
-            if (resolvedIp != null) {
-              targetHost = resolvedIp;
+          final completer = Completer<Socket>();
+
+          Future<void> attemptConnection() async {
+            // 1. If a proxy is configured, respect it and connect directly to the proxy
+            if (proxyHost != null) {
+              try {
+                final socket = await Socket.connect(
+                  proxyHost,
+                  proxyPort!,
+                  timeout: const Duration(seconds: 10),
+                );
+                completer.complete(socket);
+              } catch (proxyError) {
+                completer.completeError(proxyError);
+              }
+              return;
+            }
+
+            // 2. Perform static map or dynamic DNS resolution via DoH first (bypasses DNS hijacking instantly)
+            String targetHost = uri.host;
+            try {
+              if (dnsMap != null && dnsMap!.containsKey(uri.host)) {
+                targetHost = dnsMap![uri.host]!;
+              } else {
+                final resolvedIp = await _resolveHostViaDoh(uri.host);
+                if (resolvedIp != null) {
+                  targetHost = resolvedIp;
+                }
+              }
+
+              final socket = await Socket.connect(
+                targetHost,
+                uri.port,
+                timeout: const Duration(seconds: 5),
+              );
+
+              if (uri.scheme == 'https') {
+                final secureSocket = await SecureSocket.secure(
+                  socket,
+                  host: uri.host, // Original host for SNI / validation
+                );
+                completer.complete(secureSocket);
+              } else {
+                completer.complete(socket);
+              }
+            } catch (e) {
+              debugPrint(
+                '[CustomDnsAdapter] DoH/IP connection to $targetHost failed: $e. Falling back to direct hostname connection...',
+              );
+              try {
+                final socket = await Socket.connect(
+                  uri.host,
+                  uri.port,
+                  timeout: const Duration(seconds: 10),
+                );
+
+                if (uri.scheme == 'https') {
+                  final secureSocket = await SecureSocket.secure(
+                    socket,
+                    host: uri.host,
+                  );
+                  completer.complete(secureSocket);
+                } else {
+                  completer.complete(socket);
+                }
+              } catch (fallbackError) {
+                completer.completeError(fallbackError);
+              }
             }
           }
 
-          // 3. Connect using the resolved IP/host and port
-          final futureSocket = Socket.connect(
-            targetHost,
-            uri.port,
-            timeout: const Duration(seconds: 10),
-          );
-
-          if (uri.scheme == 'https') {
-            final secureFutureSocket = futureSocket.then((socket) {
-              return SecureSocket.secure(
-                socket,
-                host: uri
-                    .host, // SecureSocket must know original host for SNI and TLS cert validation
-              );
-            });
-            return ConnectionTask.fromSocket(secureFutureSocket, () {});
-          }
-
-          return ConnectionTask.fromSocket(futureSocket, () {});
+          attemptConnection();
+          return ConnectionTask.fromSocket(completer.future, () {});
         };
 
         return client;
