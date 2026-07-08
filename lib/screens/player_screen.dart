@@ -138,6 +138,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             'dood',
             'voe.sx',
             'voe.sh',
+            'voe',
+            'pamelachangemission',
             '1fichier',
             'streamvid',
             'vidoza',
