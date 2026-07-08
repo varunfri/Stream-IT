@@ -22,7 +22,7 @@ It is designed with a sleek dark-themed layout, smooth micro-interactions, robus
    - Click on the backdrop image on the details screen to open a high-resolution dialog view.
    - Integrated with `InteractiveViewer` supporting native **pinch-to-zoom** and **pan** gestures.
 4. **App Lock & Biometric Protection**
-   
+
    - Integrates `local_auth` to lock the application on startup.
    - Prompts the user for system biometrics (Fingerprint/FaceID) or device credentials (PIN/Pattern/Passcode) to unlock the app when screen lock protection is enabled.
 5. **Instant Details Page & Background Stream Scrapers**
@@ -48,8 +48,8 @@ It is designed with a sleek dark-themed layout, smooth micro-interactions, robus
    - Pressing back on the **Home** tab prompts a custom Netflix-red dark-styled confirmation dialog asking *"Do you want to exit?"*.
 10. **State & Routing Architecture**
 
-   - State management powered by **Riverpod**.
-   - Navigation and deep linking configured using **GoRouter**.
+- State management powered by **Riverpod**.
+- Navigation and deep linking configured using **GoRouter**.
 
 ---
 
@@ -74,7 +74,9 @@ lib/
 - Android SDK / JDK (for Android builds) or Xcode (for macOS/iOS targets)
 
 ### 2. Environment Configuration
+
 Create a `config/dev.json` file in the root directory:
+
 ```json
 {
   "TMDB_API_KEY": "your_tmdb_api_key_here",
@@ -83,16 +85,75 @@ Create a `config/dev.json` file in the root directory:
 ```
 
 ### 3. Run the Application
+
 Start the Android emulator or connect a device, then run:
+
 ```bash
 flutter run --dart-define-from-file=config/dev.json
 ```
 
 ### 4. Build Signed Release APK
+
 To build a signed release Android APK using the preconfigured keystore settings:
+
 ```bash
 flutter build apk --release --dart-define-from-file=config/dev.json
 ```
 
 The output signed APK will be located at:
 `build/app/outputs/flutter-apk/app-release.apk`
+
+---
+
+## macOS
+
+### Prerequisites
+
+- macOS 12.0 (Monterey) or later
+- Xcode 14+ with macOS target enabled
+- Flutter macOS desktop support enabled:
+  ```bash
+  flutter config --enable-macos-desktop
+  ```
+
+### Run on macOS (Debug)
+
+```bash
+flutter run -d macos --dart-define-from-file=config/dev.json
+```
+
+> **Note:** On the first launch, macOS will request network access for the sandboxed app. This is expected — click **Allow** to enable internet connectivity.
+
+### Build Release `.app`
+
+```bash
+flutter build macos --release --dart-define-from-file=config/dev.json
+```
+
+The compiled `.app` bundle will be located at:
+`build/macos/Build/Products/Release/Stream-IT.app`
+
+### Package as Drag-and-Drop `.dmg` Installer
+
+After building the release app, run the following to produce a compressed `.dmg` installer:
+
+```bash
+mkdir -p /tmp/stream_it_dmg
+cp -R build/macos/Build/Products/Release/Stream-IT.app /tmp/stream_it_dmg/Stream-IT.app
+ln -s /Applications /tmp/stream_it_dmg/Applications
+hdiutil create \
+  -volname "Stream-IT" \
+  -srcfolder /tmp/stream_it_dmg \
+  -ov -format UDZO \
+  build/macos/Build/Products/Release/Stream-IT.dmg
+rm -rf /tmp/stream_it_dmg
+```
+
+The installer DMG will be at:
+`build/macos/Build/Products/Release/Stream-IT.dmg`
+
+macOS Entitlements
+
+The app requires the following macOS sandbox entitlements, already configured in the project:
+
+* [ ] EntitlementValuePurpose`com.apple.security.app-sandboxtrue`Required for Mac App Store distribution`com.apple.security.network.clienttrue`Allows outgoing internet connections (TMDB API, video streams)`com.apple.security.network.servertrue` *(debug only)*Allows the Flutter debug daemon to connect`com.apple.security.cs.allow-jittrue` *(debug only)*Enables JIT compilation in debug mode

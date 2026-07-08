@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -29,6 +30,29 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _checkLock();
+    // macOS Cmd+L → lock shortcut (HardwareKeyboard works even when
+    // WKWebView steals OS-level focus from the Flutter focus tree)
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      HardwareKeyboard.instance.addHandler(_handleMacOSKey);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      HardwareKeyboard.instance.removeHandler(_handleMacOSKey);
+    }
+    super.dispose();
+  }
+
+  bool _handleMacOSKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey == LogicalKeyboardKey.keyL &&
+        HardwareKeyboard.instance.isMetaPressed) {
+      _lockApp();
+      return true;
+    }
+    return false;
   }
 
   void _checkLock() {
@@ -70,6 +94,13 @@ class _MainScreenState extends State<MainScreen> {
     } catch (e) {
       debugPrint('Authentication error: $e');
     }
+  }
+
+  /// Locks the app immediately (macOS Cmd+L shortcut).
+  void _lockApp() {
+    if (!SettingsService().isLockEnabled) return;
+    setState(() => _isAuthenticated = false);
+    _authenticate();
   }
 
   Future<bool?> _showExitDialog(BuildContext context) {
@@ -183,7 +214,7 @@ class _MainScreenState extends State<MainScreen> {
       );
     }
 
-    return PopScope(
+    final scaffold = PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
@@ -237,5 +268,7 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
     );
+
+    return scaffold;
   }
 }

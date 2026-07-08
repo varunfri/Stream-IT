@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:adblocker_webview/adblocker_webview.dart';
@@ -87,26 +89,73 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class MyApp extends ConsumerWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final router = ref.watch(goRouterProvider);
+  ConsumerState<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends ConsumerState<MyApp> {
+  late GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    // Register a low-level key handler for macOS — this fires regardless of
+    // which native view (e.g. WKWebView) currently holds OS-level focus.
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      HardwareKeyboard.instance.addHandler(_handleMacOSKey);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      HardwareKeyboard.instance.removeHandler(_handleMacOSKey);
+    }
+    super.dispose();
+  }
+
+  bool _handleMacOSKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final key = event.logicalKey;
+    final meta = HardwareKeyboard.instance.isMetaPressed;
+
+    // Esc → go back
+    if (key == LogicalKeyboardKey.escape) {
+      if (_router.canPop()) {
+        _router.pop();
+        return true; // consumed
+      }
+    }
+
+    // Cmd+W → quit
+    if (meta && key == LogicalKeyboardKey.keyW) {
+      SystemNavigator.pop();
+      return true;
+    }
+
+    return false; // not consumed, let the event propagate
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _router = ref.watch(goRouterProvider);
     return MaterialApp.router(
       title: 'Stream IT',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF141414), // Netflix dark
-        primaryColor: const Color(0xFFE50914), // Netflix red
+        scaffoldBackgroundColor: const Color(0xFF141414),
+        primaryColor: const Color(0xFFE50914),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFE50914),
           secondary: Color(0xFFE50914),
         ),
         useMaterial3: true,
       ),
-      routerConfig: router,
+      routerConfig: _router,
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -94,14 +95,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     _controller = WebViewController.fromPlatformCreationParams(params)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
       ..setUserAgent(
         'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
         '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
       );
 
+    if (defaultTargetPlatform != TargetPlatform.macOS) {
+      _controller.setBackgroundColor(Colors.black);
+    }
+
     if (_controller.platform is AndroidWebViewController) {
-      final androidController = _controller.platform as AndroidWebViewController;
+      final androidController =
+          _controller.platform as AndroidWebViewController;
       androidController.setMediaPlaybackRequiresUserGesture(false);
     }
 
@@ -147,6 +152,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             'vidguard',
             'hgcloud',
             'hanerix',
+            'vip.seekplayer.vip',
           ];
 
           bool isAllowed = false;
@@ -166,32 +172,36 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           debugPrint('PlayerScreen [BLOCKED]: $url');
           return NavigationDecision.prevent;
         },
-          onPageStarted: (url) {
-            debugPrint('PlayerScreen: Page started → $url');
-            if (mounted) setState(() => _isLoading = true);
-            _controller.runJavaScript(
-              '(function() { '
-              '  var style = document.createElement("style"); '
-              '  style.innerHTML = "html, body { background-color: black !important; color: white !important; }"; '
-              '  document.head.appendChild(style); '
-              '})();'
-            );
-          },
-          onPageFinished: (url) {
-            debugPrint('PlayerScreen: Page finished → $url');
-            if (mounted) setState(() => _isLoading = false);
+        onPageStarted: (url) {
+          debugPrint('PlayerScreen: Page started → $url');
+          // about:blank is an intermediate blank frame used by many embed players;
+          // toggling _isLoading for it causes a rebuild loop — skip it.
+          if (url == 'about:blank') return;
+          if (mounted) setState(() => _isLoading = true);
+          _controller.runJavaScript(
+            '(function() { '
+            '  var style = document.createElement("style"); '
+            '  style.innerHTML = "html, body { background-color: black !important; color: white !important; }"; '
+            '  document.head.appendChild(style); '
+            '})();',
+          );
+        },
+        onPageFinished: (url) {
+          debugPrint('PlayerScreen: Page finished → $url');
+          if (url == 'about:blank') return;
+          if (mounted) setState(() => _isLoading = false);
 
-            // Inject our custom click/redirect blocker
-            _controller.runJavaScript(_adBlockJs);
-          },
-          onWebResourceError: (error) {
-            debugPrint(
-              'PlayerScreen: Resource error [${error.errorCode}]: ${error.description}',
-            );
-            if (mounted) setState(() => _isLoading = false);
-          },
-        ),
-      );
+          // Inject our custom click/redirect blocker
+          _controller.runJavaScript(_adBlockJs);
+        },
+        onWebResourceError: (error) {
+          debugPrint(
+            'PlayerScreen: Resource error [${error.errorCode}]: ${error.description}',
+          );
+          if (mounted) setState(() => _isLoading = false);
+        },
+      ),
+    );
 
     _loadPlayerUrl();
   }
@@ -384,32 +394,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               ),
             ),
           ),
-          // Minimal PiP button in top-right
-          Positioned(
-            bottom: 8,
-            left: MediaQuery.of(context).size.width * 0.43,
-            child: SafeArea(
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _enterPip,
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
-                      color: Colors.black54,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.picture_in_picture_alt,
-                      color: Colors.white,
-                      size: 22,
+          // PiP button — Android only
+          if (defaultTargetPlatform == TargetPlatform.android)
+            Positioned(
+              bottom: 8,
+              left: MediaQuery.of(context).size.width * 0.43,
+              child: SafeArea(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _enterPip,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.picture_in_picture_alt,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
