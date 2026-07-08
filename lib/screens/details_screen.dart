@@ -43,56 +43,20 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
     if (details != null) {
       final tmdbId = details['id']?.toString() ?? widget.id;
 
-      // Parallel fetch credits, watch providers, SpeedPorn and UiiUMovie availability
+      // 1. Parallel fetch credits and watch providers (TMDB queries are fast)
       final creditsFuture = service.getCredits(tmdbId, widget.type);
       final providersFuture = service.getWatchProviders(tmdbId, widget.type);
 
-      final title = details['title'] ?? details['name'] ?? '';
-      final year = details['release_date']?.toString().split('-').first ?? '';
-
-      Future<List<Map<String, String>>> speedPornFuture = Future.value([]);
-      Future<List<Map<String, String>>> uiiumovieFuture = Future.value([]);
-
-      if (title.isNotEmpty) {
-        final slug = title
-            .toLowerCase()
-            .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
-            .trim()
-            .replaceAll(RegExp(r'\s+'), '-');
-        speedPornFuture = ref
-            .read(speedPornServiceProvider)
-            .fetchEmbedServers(title);
-
-        if (year.isNotEmpty) {
-          uiiumovieFuture = ref
-              .read(uiiUMovieServiceProvider)
-              .fetchEmbedServers(slug, year);
-        }
-      }
-
-      final results = await Future.wait([
+      final tmdbResults = await Future.wait([
         creditsFuture,
         providersFuture,
-        speedPornFuture,
-        uiiumovieFuture,
       ]);
-      final credits = results[0] as List<Map<String, dynamic>>;
-      final providersData = results[1] as Map<String, dynamic>?;
-      final speedPornServers = results[2] as List<Map<String, String>>;
-      final uiiumovieServers = results[3] as List<Map<String, String>>;
 
-      if (mounted) {
-        setState(() {
-          _cast = credits;
-          _speedPornServers = speedPornServers;
-          _uiiUMovieServers = uiiumovieServers;
-          _isSpeedPornAvailable = speedPornServers.isNotEmpty;
-          _isUiiUMovieAvailable = uiiumovieServers.isNotEmpty;
-        });
-      }
+      final credits = tmdbResults[0] as List<Map<String, dynamic>>;
+      final providersData = tmdbResults[1] as Map<String, dynamic>?;
 
+      final List<Map<String, dynamic>> platforms = [];
       if (providersData != null) {
-        final List<Map<String, dynamic>> platforms = [];
         Map<String, dynamic>? regionData;
         if (providersData.containsKey('US')) {
           regionData = providersData['US'];
@@ -110,24 +74,64 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
             platforms.addAll(free.map((e) => Map<String, dynamic>.from(e)));
           }
         }
+      }
 
-        if (mounted) {
-          setState(() {
-            _watchProviders = platforms;
+      if (mounted) {
+        setState(() {
+          _details = details;
+          _cast = credits;
+          _watchProviders = platforms;
+          _isLoading = false; // RENDER SCREEN IMMEDIATELY!
+          if (widget.type == 'tv') {
+            _numberOfSeasons = details['number_of_seasons'] ?? 1;
+            _fetchEpisodes(1);
+          }
+        });
+      }
+
+      // 2. Fetch SpeedPorn and UiiUMovie streams asynchronously in the background
+      final title = details['title'] ?? details['name'] ?? '';
+      final year = details['release_date']?.toString().split('-').first ?? '';
+
+      if (title.isNotEmpty) {
+        final slug = title
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+            .trim()
+            .replaceAll(RegExp(r'\s+'), '-');
+
+        // Fetch SpeedPorn in background
+        ref.read(speedPornServiceProvider).fetchEmbedServers(title).then((speedPornServers) {
+          if (mounted) {
+            setState(() {
+              _speedPornServers = speedPornServers;
+              _isSpeedPornAvailable = speedPornServers.isNotEmpty;
+            });
+          }
+        }).catchError((e) {
+          debugPrint('Error fetching SpeedPorn in background: $e');
+        });
+
+        // Fetch UiiUMovie in background
+        if (year.isNotEmpty) {
+          ref.read(uiiUMovieServiceProvider).fetchEmbedServers(slug, year).then((uiiumovieServers) {
+            if (mounted) {
+              setState(() {
+                _uiiUMovieServers = uiiumovieServers;
+                _isUiiUMovieAvailable = uiiumovieServers.isNotEmpty;
+              });
+            }
+          }).catchError((e) {
+            debugPrint('Error fetching UiiUMovie in background: $e');
           });
         }
       }
-    }
-
-    if (mounted) {
-      setState(() {
-        _details = details;
-        _isLoading = false;
-        if (widget.type == 'tv' && details != null) {
-          _numberOfSeasons = details['number_of_seasons'] ?? 1;
-          _fetchEpisodes(1);
-        }
-      });
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

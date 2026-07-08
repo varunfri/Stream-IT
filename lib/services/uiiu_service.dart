@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:html/parser.dart' show parse;
-import '../utils/custom_dns_adapter.dart';
 
 final uiiUMovieServiceProvider = Provider<UiiUMovieService>((ref) {
   return UiiUMovieService();
@@ -13,9 +12,7 @@ class UiiUMovieService {
 
   final Dio _dio;
 
-  UiiUMovieService() : _dio = Dio() {
-    CustomDnsAdapter().configure(_dio);
-  }
+  UiiUMovieService() : _dio = Dio();
 
   /// Scrapes the details page of a uiiumovie post to extract embed server urls
   String _normalizeEmbedUrl(String url) {

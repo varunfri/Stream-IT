@@ -8,29 +8,45 @@ It is designed with a sleek dark-themed layout, smooth micro-interactions, robus
 
 ## Key Features
 
-1. **Robust Networking (DNS-over-HTTPS)**
-
-   - Configured with a `CustomDnsAdapter` on top of the Dio client.
-   - Bypasses network resolution blocks automatically by querying Cloudflare/Google DNS endpoints securely over HTTPS.
-2. **Cast & Filmography Integrations**
+1. **Cast & Filmography Integrations**
 
    - Displays a horizontal scrolling **Cast** row on the Movie/TV Show details screen.
    - Tap on any cast member to navigate to their **Actor Profile Screen**, showing their profile details, biography, and a chronological grid of their entire filmography (movies/shows).
-3. **Production Company Directories**
+2. **Production Company Directories**
 
    - Integrated TMDB company searching directly into the search tab.
    - Displays dedicated **Company Screens** featuring company branding (logo), origin details, and headquarters.
    - Fetches the company's entire catalog upfront concurrently in parallel (using `Future.wait`) and supports sorting by release year.
-4. **Artwork Enlarger & Gestures**
+3. **Artwork Enlarger & Gestures**
 
    - Click on the backdrop image on the details screen to open a high-resolution dialog view.
    - Integrated with `InteractiveViewer` supporting native **pinch-to-zoom** and **pan** gestures.
-5. **Premium Exit Flow**
+4. **App Lock & Biometric Protection**
+   
+   - Integrates `local_auth` to lock the application on startup.
+   - Prompts the user for system biometrics (Fingerprint/FaceID) or device credentials (PIN/Pattern/Passcode) to unlock the app when screen lock protection is enabled.
+5. **Instant Details Page & Background Stream Scrapers**
+
+   - Separates fast TMDB data queries from third-party streaming providers.
+   - The Details Screen renders metadata and cast instantly (under 300ms), while SpeedPorn and UiiUMovie scrapers run asynchronously in the background.
+6. **Stable PiP Restore & Player Sandboxing**
+
+   - Entering Picture-in-Picture (PiP) mode renders the video player borderless. Exiting PiP mode seamlessly restores the full-screen player, maintaining video playback continuity.
+   - Protects the video player using a dual-layer sandbox that blocks ad redirects and intercepts popups (`window.open`).
+7. **Search Settings & Preferences**
+
+   - Stateful settings panel accessible directly from the Search bar.
+   - Allows toggling adult content filters (`include_adult`) and biometric lock settings, persisting preferences locally using **Hive**.
+8. **Dark Mode Loading & Auto-Rotation**
+
+   - Features a black WebView canvas background and early HTML body color overrides to ensure zero white flashes during player initialization.
+   - Supports freeform sensor-based rotation between normal and reverse landscape, automatically recovered when exiting PiP mode.
+9. **Premium Exit Flow**
 
    - Intercepts system back-key presses at the root.
    - Pressing back on sub-tabs redirects to the **Home** tab first.
    - Pressing back on the **Home** tab prompts a custom Netflix-red dark-styled confirmation dialog asking *"Do you want to exit?"*.
-6. **State & Routing Architecture**
+10. **State & Routing Architecture**
 
    - State management powered by **Riverpod**.
    - Navigation and deep linking configured using **GoRouter**.

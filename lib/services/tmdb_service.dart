@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../utils/custom_dns_adapter.dart';
 import 'settings_service.dart';
 
 final tmdbDioProvider = Provider<Dio>((ref) {
@@ -25,10 +24,6 @@ final tmdbDioProvider = Provider<Dio>((ref) {
       receiveTimeout: const Duration(seconds: 10),
     ),
   );
-
-  // Apply custom DNS resolution mapping (Cloudflare/Google DoH)
-  final dnsAdapter = CustomDnsAdapter();
-  dnsAdapter.configure(dio);
 
   return dio;
 });

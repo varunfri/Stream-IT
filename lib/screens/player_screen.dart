@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,10 +9,8 @@ import '../services/recently_watched_service.dart';
 import '../services/speed_service.dart';
 import '../services/uiiu_service.dart';
 import 'package:adblocker_webview/adblocker_webview.dart';
-// ignore: implementation_imports
-import 'package:adblocker_webview/src/block_resource_loading.dart';
-// ignore: implementation_imports
-import 'package:adblocker_webview/src/elem_hide.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String type; // 'movie' or 'tv'
@@ -55,13 +54,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _enablePip();
 
     _pipChannel.setMethodCallHandler((call) async {
-      if (call.method == 'onPipModeChanged') {
-        final bool inPip = call.arguments as bool;
-        if (mounted) {
-          setState(() {
-            _isInPipMode = inPip;
-          });
-        }
+      switch (call.method) {
+        case 'onPipModeChanged':
+          final bool inPip = call.arguments as bool;
+          if (mounted) {
+            setState(() {
+              _isInPipMode = inPip;
+            });
+            if (!inPip) {
+              SystemChrome.setPreferredOrientations([
+                DeviceOrientation.landscapeLeft,
+                DeviceOrientation.landscapeRight,
+              ]);
+            }
+          }
+          break;
       }
     });
 
@@ -75,85 +82,102 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       SystemUiMode.immersiveSticky, // hide status bar & nav bar
     );
 
-    _controller = WebViewController()
+    late final PlatformWebViewControllerCreationParams params;
+    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    _controller = WebViewController.fromPlatformCreationParams(params)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
       ..setUserAgent(
         'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
         '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-      )
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onNavigationRequest: (NavigationRequest request) {
-            final url = request.url;
+      );
 
-            // Check if EasyList blocks the resource URL first
-            if (AdBlockerWebviewController.instance.shouldBlockResource(url)) {
-              debugPrint('PlayerScreen [EASYLIST BLOCKED]: $url');
-              return NavigationDecision.prevent;
-            }
+    if (_controller.platform is AndroidWebViewController) {
+      final androidController = _controller.platform as AndroidWebViewController;
+      androidController.setMediaPlaybackRequiresUserGesture(false);
+    }
 
-            final lowerUrl = url.toLowerCase();
-            final allowedKeywords = [
-              'vaplayer.ru',
-              'speedporn.net',
-              'uiiumovie.in',
-              'mixdrop',
-              'mxdrop',
-              'miiixdrop',
-              'streamtape',
-              'terabox',
-              'terasharefile',
-              'jodwish',
-              'dood',
-              'voe.sx',
-              'voe.sh',
-              '1fichier',
-              'streamvid',
-              'vidoza',
-              'filemoon',
-              'vidguard',
-              'hgcloud',
-              'hanerix',
-            ];
+    _controller.setNavigationDelegate(
+      NavigationDelegate(
+        onNavigationRequest: (NavigationRequest request) {
+          final url = request.url;
 
-            bool isAllowed = false;
-            for (var kw in allowedKeywords) {
-              if (lowerUrl.contains(kw)) {
-                isAllowed = true;
-                break;
-              }
-            }
+          // Only block top-level main frame navigations to avoid breaking nested subframe player layers
+          if (!request.isMainFrame) {
+            return NavigationDecision.navigate;
+          }
 
-            if (isAllowed ||
-                url.startsWith('about:') ||
-                url.startsWith('javascript:')) {
-              return NavigationDecision.navigate;
-            }
-            // DNS-style block: silently drop everything else
-            debugPrint('PlayerScreen [BLOCKED]: $url');
+          // Check if EasyList blocks the resource URL first
+          if (AdBlockerWebviewController.instance.shouldBlockResource(url)) {
+            debugPrint('PlayerScreen [EASYLIST BLOCKED]: $url');
             return NavigationDecision.prevent;
-          },
+          }
+
+          final lowerUrl = url.toLowerCase();
+          final allowedKeywords = [
+            'vaplayer.ru',
+            'speedporn.net',
+            'uiiumovie.in',
+            'mixdrop',
+            'mxdrop',
+            'miiixdrop',
+            'miiiixdrop',
+            'xdrop',
+            'streamtape',
+            'terabox',
+            'terasharefile',
+            'jodwish',
+            'dood',
+            'voe.sx',
+            'voe.sh',
+            '1fichier',
+            'streamvid',
+            'vidoza',
+            'filemoon',
+            'vidguard',
+            'hgcloud',
+            'hanerix',
+          ];
+
+          bool isAllowed = false;
+          for (var kw in allowedKeywords) {
+            if (lowerUrl.contains(kw)) {
+              isAllowed = true;
+              break;
+            }
+          }
+
+          if (isAllowed ||
+              url.startsWith('about:') ||
+              url.startsWith('javascript:')) {
+            return NavigationDecision.navigate;
+          }
+          // DNS-style block: silently drop everything else
+          debugPrint('PlayerScreen [BLOCKED]: $url');
+          return NavigationDecision.prevent;
+        },
           onPageStarted: (url) {
             debugPrint('PlayerScreen: Page started → $url');
             if (mounted) setState(() => _isLoading = true);
-
-            // Inject EasyList resource blocker script as early as possible
-            final rules = AdBlockerWebviewController.instance.allResourceRules;
-            _controller.runJavaScript(getResourceLoadingBlockerScript(rules));
-
-            // Apply element hiding after page load starts
-            final cssRules = AdBlockerWebviewController.instance
-                .getCssRulesForWebsite(url);
-            _controller.runJavaScript(generateHidingScript(cssRules));
+            _controller.runJavaScript(
+              '(function() { '
+              '  var style = document.createElement("style"); '
+              '  style.innerHTML = "html, body { background-color: black !important; color: white !important; }"; '
+              '  document.head.appendChild(style); '
+              '})();'
+            );
           },
           onPageFinished: (url) {
             debugPrint('PlayerScreen: Page finished → $url');
             if (mounted) setState(() => _isLoading = false);
-
-            // Apply element hiding after page load finishes
-            final cssRules = AdBlockerWebviewController.instance
-                .getCssRulesForWebsite(url);
-            _controller.runJavaScript(generateHidingScript(cssRules));
 
             // Inject our custom click/redirect blocker
             _controller.runJavaScript(_adBlockJs);

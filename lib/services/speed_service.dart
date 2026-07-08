@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:html/parser.dart' show parse;
-import '../utils/custom_dns_adapter.dart';
 
 final speedPornServiceProvider = Provider<SpeedPornService>((ref) {
   return SpeedPornService();
@@ -12,10 +11,7 @@ class SpeedPornService {
   static const String baseUrl = String.fromEnvironment('SPEED_URI');
   final Dio _dio;
 
-  SpeedPornService() : _dio = Dio() {
-    // Configure with custom DNS over HTTPS adapter to bypass network blocks
-    CustomDnsAdapter().configure(_dio);
-  }
+  SpeedPornService() : _dio = Dio();
 
   /// Scrapes the details page of a speedporn post to extract embed server urls
   Future<List<Map<String, String>>> fetchEmbedServers(String title) async {

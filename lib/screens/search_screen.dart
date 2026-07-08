@@ -541,23 +541,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     SwitchListTile(
                       activeThumbColor: const Color(0xFFE50914),
                       title: const Text(
-                        'Use Custom Connection Adapter',
-                        style: TextStyle(color: Colors.white, fontSize: 14),
-                      ),
-                      subtitle: const Text(
-                        'Enable DoH and static bypasses for blocked endpoints',
-                        style: TextStyle(color: Colors.grey, fontSize: 11),
-                      ),
-                      value: settings.useCustomAdapter,
-                      onChanged: (val) {
-                        settings.useCustomAdapter = val;
-                        setDialogState(() {});
-                      },
-                    ),
-                    const Divider(color: Colors.white12),
-                    SwitchListTile(
-                      activeThumbColor: const Color(0xFFE50914),
-                      title: const Text(
                         'Screen Lock Protection',
                         style: TextStyle(color: Colors.white, fontSize: 14),
                       ),

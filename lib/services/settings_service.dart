@@ -22,12 +22,6 @@ class SettingsService {
     if (_initialized) _box.put('includeAllInSearch', value);
   }
 
-  bool get useCustomAdapter => _initialized
-      ? _box.get('useCustomAdapter', defaultValue: true) as bool
-      : true;
-  set useCustomAdapter(bool value) {
-    if (_initialized) _box.put('useCustomAdapter', value);
-  }
 
   bool get isLockEnabled => _initialized
       ? _box.get('isLockEnabled', defaultValue: false) as bool

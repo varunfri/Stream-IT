@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/content_item.dart';
-import '../utils/custom_dns_adapter.dart';
 import 'tmdb_service.dart';
 
 final dioProvider = Provider<Dio>((ref) {
@@ -13,14 +12,6 @@ final dioProvider = Provider<Dio>((ref) {
       receiveTimeout: const Duration(seconds: 10),
     ),
   );
-
-  // Apply custom DNS resolution mapping (e.g. mapping vidapi.ru to a custom IP)
-  final dnsAdapter = CustomDnsAdapter(
-    dnsMap: {
-      // Example: 'vidapi.ru': '104.21.23.230',
-    },
-  );
-  dnsAdapter.configure(dio);
 
   return dio;
 });
